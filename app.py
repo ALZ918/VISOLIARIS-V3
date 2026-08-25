@@ -119,6 +119,30 @@ EMPTY = {"foliage": 0.0, "green": 0.0, "greenness": 0.0, "yellow": 0.0, "brown":
          "spots": 0, "leaves": 0, "stem_length": 0.0, "stem_width": 0.0}
 
 
+def foliage_mask(img, h, s, v):
+    """Foliage mask for one BGR frame: chromatic vegetation segmentation, hue windows as
+    fallback.
+
+    Green dominance gd = (G-R)/(G+R) on the normalised channels separates leaf tissue from
+    everything grey, brown, brick or wall-coloured - the hue windows alone let any warm,
+    saturated pixel count as plant, so pots, soil and walls all passed. gd is
+    brightness-independent, so shadowed leaves stay in. Hue windows (hue 8-95, some
+    saturation and brightness) remain for degenerate frames where the chroma test comes up
+    empty - heavy colour cast, near-grey plants.
+    """
+    b, g, r = cv2.split(img.astype(np.float32))
+    gd = (g - r) / (g + r + 1e-6)
+    m = ((gd > 0.04) & (s >= 30) & (v >= 30)).astype(np.uint8)
+    m = cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+    if m.mean() > 0.002:
+        # close the mask so dead-black lesions, which are too dark to pass any colour
+        # test, still count as foliage instead of vanishing as holes
+        return cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((21, 21), np.uint8))
+    plant = ((h >= 8) & (h <= 95) & (s >= 50) & (v >= 40)).astype(np.uint8)
+    plant = cv2.morphologyEx(plant, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+    return cv2.morphologyEx(plant, cv2.MORPH_CLOSE, np.ones((21, 21), np.uint8))
+
+
 def morphology(leaf):
     """Leaf count and stem size read straight off the foliage mask.
 
@@ -192,18 +216,14 @@ def look(img):
     box is [x, y, w, h] as fractions of the frame, so the browser can scale it to any
     display size; features is the vector the KNearest model is trained on.
 
-    IMPORTANT NOTE: the foliage mask is hue windows on a downscaled HSV image - it will call a
-    terracotta pot or a yellow wall foliage. Swap in a segmentation model if backgrounds get busy.
+    The foliage mask comes from chromatic vegetation segmentation (foliage_mask), with hue
+    windows as fallback - see foliage_mask for the trade-offs.
     """
     scale = 512 / max(img.shape[:2])
     if scale < 1:
         img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
     h, s, v = cv2.split(cv2.cvtColor(cv2.GaussianBlur(img, (5, 5), 0), cv2.COLOR_BGR2HSV))
-    plant = ((h >= 8) & (h <= 95) & (s >= 50) & (v >= 40)).astype(np.uint8)
-    plant = cv2.morphologyEx(plant, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
-    # close the mask so dead-black lesions, which are too dark to pass the hue test, still count
-    # as foliage instead of vanishing as holes
-    mask = cv2.morphologyEx(plant, cv2.MORPH_CLOSE, np.ones((21, 21), np.uint8))
+    mask = foliage_mask(img, h, s, v)
     leaf = mask > 0
     area = int(leaf.sum())
     if not area:  # nothing plant-coloured in frame
