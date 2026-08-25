@@ -1,0 +1,591 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VISOLIARIS V3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Karla:wght@400;500;600&family=Zilla+Slab:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light;
+    --board: #dde0d6;      /* specimen mounting board */
+    --board-2: #d1d5c8;
+    --board-3: #c4c9ba;
+    --rule: #a5ad98;
+    --ink: #14201a;
+    --ink-2: #5c6a5c;
+    --chlor: #a8760a;      /* chlorosis yellow — the alert signal */
+    --slab: "Zilla Slab", Georgia, serif;
+    --body: "Karla", ui-sans-serif, system-ui, sans-serif;
+    --mono: "Courier Prime", ui-monospace, "Courier New", monospace;
+    --step: 220ms cubic-bezier(.2,.7,.3,1);
+  }
+  * { box-sizing: border-box }
+  /* element rules below set display:block/grid, which would beat the hidden attribute */
+  [hidden] { display: none !important }
+  html { -webkit-text-size-adjust: 100% }
+  body {
+    margin: 0; background: var(--board); color: var(--ink);
+    font: 400 15px/1.55 var(--body);
+  }
+  main { max-width: 1040px; margin: 0 auto; padding: 28px 20px 56px }
+
+  /* ── masthead ─────────────────────────────────────────── */
+  .masthead { display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; border-bottom: 2px solid var(--ink); padding-bottom: 12px }
+  h1 { font: 600 clamp(30px, 6vw, 46px)/0.95 var(--slab); margin: 6px 0 0; letter-spacing: -.015em }
+  .eyebrow { font: 400 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase;
+    color: var(--ink-2) }
+  .stamp { font: 400 11px/1.7 var(--mono); text-align: right; color: var(--ink-2) }
+  .stamp b { display: block; font-weight: 700; color: var(--ink) }
+  .sub { color: var(--ink-2); margin: 14px 0 26px; max-width: 46ch }
+
+  /* ── two bays ─────────────────────────────────────────── */
+  .bays { display: grid; gap: 22px; grid-template-columns: minmax(0,1fr) minmax(0,1fr) }
+  @media (max-width: 760px) { .bays { grid-template-columns: 1fr } }
+  .bay { background: var(--board-2); border: 1px solid var(--rule); padding: 14px }
+  .bay > h2 { font: 400 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase;
+    color: var(--ink-2); margin: 0 0 12px }
+
+  /* ── specimen window ──────────────────────────────────── */
+  .window { position: relative; background: #1b241d; aspect-ratio: 4/3; overflow: hidden }
+  .window video, .window img { width: 100%; height: 100%; object-fit: cover; display: block }
+  .window .overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none }
+  .window .tick { position: absolute; width: 16px; height: 16px; border: 2px solid var(--board);
+    pointer-events: none }
+  .tick.tl { top: 8px; left: 8px; border-right: 0; border-bottom: 0 }
+  .tick.tr { top: 8px; right: 8px; border-left: 0; border-bottom: 0 }
+  .tick.bl { bottom: 8px; left: 8px; border-right: 0; border-top: 0 }
+  .tick.br { bottom: 8px; right: 8px; border-left: 0; border-top: 0 }
+  .idle { position: absolute; inset: 0; display: grid; place-content: center; gap: 4px;
+    text-align: center; font: 400 11px/1.8 var(--mono); letter-spacing: .12em;
+    text-transform: uppercase; color: #6f7d6d }
+  .scan { position: absolute; left: 0; right: 0; height: 2px; background: #c9d14e;
+    box-shadow: 0 0 14px 2px rgba(201,209,78,.6); opacity: 0 }
+  .busy .scan { opacity: 1; animation: sweep 1.4s ease-in-out infinite }
+  @keyframes sweep { 0% { top: 0 } 50% { top: calc(100% - 2px) } 100% { top: 0 } }
+
+  /* ── controls ─────────────────────────────────────────── */
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px }
+  button, .btn { font: 500 13px/1 var(--body); letter-spacing: .01em; background: var(--board);
+    color: var(--ink); border: 1px solid var(--ink); border-radius: 0; padding: 10px 14px;
+    cursor: pointer; transition: background var(--step), color var(--step) }
+  button:hover, .btn:hover { background: var(--ink); color: var(--board) }
+  button:disabled { border-color: var(--rule); color: var(--rule); background: transparent;
+    cursor: default }
+  button:disabled:hover { background: transparent; color: var(--rule) }
+  :focus-visible { outline: 2px solid var(--chlor); outline-offset: 2px }
+  input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0 }
+
+  /* ── reading ──────────────────────────────────────────── */
+  .grade { font: 600 clamp(24px, 4.4vw, 34px)/1.05 var(--slab); text-transform: capitalize;
+    margin: 0; letter-spacing: -.01em }
+  .grade.pending { color: var(--rule) }
+  .headline { display: flex; align-items: center; gap: 14px }
+  .leafbox { margin-left: auto; border: 1px solid var(--rule); background: var(--board-3);
+    padding: 6px 12px 7px; text-align: right; min-width: 64px }
+  .leafbox span { display: block; font: 400 9px/1.4 var(--mono); letter-spacing: .12em;
+    text-transform: uppercase; color: var(--ink-2) }
+  .leafbox b { font: 600 20px/1.1 var(--slab); font-variant-numeric: tabular-nums }
+  .rows { margin: 18px 0 0; display: grid; gap: 9px }
+  .row { display: grid; grid-template-columns: 74px 1fr 30px; align-items: center; gap: 10px }
+  .row span { font: 400 10px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-2) }
+  .row em { font: 400 11px/1 var(--mono); font-style: normal; text-align: right; color: var(--ink-2);
+    font-variant-numeric: tabular-nums }
+  .track { height: 8px; background: var(--board-3); position: relative; overflow: hidden }
+  .track i { display: block; height: 100%; width: 0; background: var(--ink);
+    transition: width 900ms cubic-bezier(.2,.75,.25,1) }
+  .row.head { grid-template-columns: 74px 1fr 30px; margin-bottom: 4px }
+  .row.head .track { height: 12px }
+  .row.head .track i { background: var(--chlor) }
+
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; min-height: 0 }
+  .cv { margin-top: 10px; font-size: 11px; letter-spacing: .04em; color: var(--ink-2) }
+  .tag { font: 400 11px/1 var(--mono); text-transform: uppercase; letter-spacing: .08em;
+    border: 1px solid var(--chlor); color: var(--chlor); padding: 5px 8px }
+
+  .slip { margin-top: 18px; border-top: 1px dashed var(--rule); padding-top: 14px;
+    font: 400 13px/1.7 var(--mono); white-space: pre-wrap; min-height: 5.1em }
+  .slip .lead { color: var(--ink-2) }
+  .slip .caret { border-left: 7px solid var(--ink); margin-left: 1px; animation: blink 1s steps(1) infinite }
+  @keyframes blink { 50% { opacity: 0 } }
+  .fault { color: var(--chlor); font: 400 13px/1.7 var(--mono) }
+
+  /* ── chart strip: the signature ───────────────────────── */
+  .chart { margin-top: 30px; border-top: 2px solid var(--ink); padding-top: 16px }
+  .chart h2 { font: 400 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase;
+    color: var(--ink-2); margin: 0 0 12px }
+  .strip { position: relative; display: grid; gap: 2px }
+  .swatches { display: grid; gap: 2px }
+  .sw { position: relative; padding: 0 }
+  .sw .chip { height: 58px; display: block }
+  .sw .no { position: absolute; top: 7px; left: 8px; font: 700 11px/1 var(--mono);
+    color: rgba(255,255,255,.85) }
+  .sw .name { display: block; font: 400 10px/1.4 var(--mono); letter-spacing: .08em;
+    text-transform: uppercase; color: var(--ink-2); margin-top: 6px; min-height: 2.8em }
+  .marker { position: absolute; top: -11px; width: 0; height: 0; border-left: 7px solid transparent;
+    border-right: 7px solid transparent; border-top: 9px solid var(--ink); opacity: 0;
+    transition: left 700ms cubic-bezier(.2,.75,.25,1), opacity var(--step) }
+  .note { font: 400 11px/1.6 var(--mono); color: var(--ink-2); margin: 14px 0 0 }
+
+  /* ── record: last uploads ─────────────────────────────── */
+  .cards { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px }
+  @media (max-width: 760px) { .cards { grid-template-columns: 1fr } }
+  .card { background: var(--board-2); border: 1px solid var(--rule); overflow: hidden }
+  .card img { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block }
+  .card .meta { padding: 8px 10px 10px }
+  .card .cond { font: 600 16px/1.2 var(--slab); text-transform: capitalize; margin: 0;
+    letter-spacing: -.01em }
+  .card .sub { display: block; font: 400 10px/1.6 var(--mono); letter-spacing: .06em;
+    text-transform: uppercase; color: var(--ink-2); margin-top: 3px }
+  .card .health { height: 6px; background: var(--board-3); margin-top: 8px; overflow: hidden }
+  .card .health i { display: block; height: 100%; background: var(--ink) }
+  .empty { font: 400 11px/1.6 var(--mono); color: var(--ink-2); margin: 0 }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 1ms !important; animation-iteration-count: 1 !important;
+        transition-duration: 1ms !important }
+  }
+</style>
+
+<main>
+  <header class="masthead">
+    <div>
+      <p class="eyebrow">Whole-plant condition grading</p>
+      <h1>VISOLIARIS V3</h1>
+    </div>
+    <p class="stamp"><b>{{ model }}</b>{{ labels|length }}-step scale</p>
+  </header>
+
+  <p class="sub">Point the camera at a whole plant, or upload a photo. Every reading is graded
+    against your own reference sheet, never against an ideal plant.</p>
+
+  <div class="bays">
+    <section class="bay">
+      <h2>Specimen</h2>
+      <div class="window" id="window">
+        <video id="cam" autoplay playsinline muted hidden></video>
+        <canvas class="overlay" id="overlay"></canvas>
+        <img id="shot" alt="Captured specimen" hidden>
+        <div class="idle" id="idle">Camera off<br>Start it, or upload a photo</div>
+        <div class="scan"></div>
+        <i class="tick tl"></i><i class="tick tr"></i><i class="tick bl"></i><i class="tick br"></i>
+      </div>
+      <div class="controls">
+        <button id="start">Start camera</button>
+        <button id="snap" disabled>Capture plant</button>
+        <label class="btn" for="file">Upload photo</label>
+        <input type="file" id="file" accept="image/*">
+      </div>
+    </section>
+
+    <section class="bay">
+      <h2>Reading</h2>
+      <div class="headline">
+        <p class="grade pending" id="grade">No specimen yet</p>
+        <div class="leafbox" id="leafbox" hidden><span>leaves</span><b id="leaves">—</b></div>
+      </div>
+
+      <div class="rows" id="rows">
+        <div class="row head"><span>Health</span><div class="track"><i data-k="health"></i></div><em data-v="health">—</em></div>
+        <div class="row"><span>Confidence</span><div class="track"><i data-k="confidence"></i></div><em data-v="confidence">—</em></div>
+        <div class="row"><span>Colour</span><div class="track"><i data-k="colour"></i></div><em data-v="colour">—</em></div>
+        <div class="row"><span>Spotting</span><div class="track"><i data-k="spotting"></i></div><em data-v="spotting">—</em></div>
+        <div class="row"><span>Turgor</span><div class="track"><i data-k="turgor"></i></div><em data-v="turgor">—</em></div>
+        <div class="row"><span>Integrity</span><div class="track"><i data-k="integrity"></i></div><em data-v="integrity">—</em></div>
+      </div>
+
+      <div class="tags" id="tags"></div>
+      <p class="cv" id="cv"></p>
+      <div class="slip" id="slip"><span class="lead">Frame the whole plant, then capture.</span></div>
+    </section>
+  </div>
+
+  <section class="chart">
+    <h2>Reference scale</h2>
+    <div class="strip">
+      <div class="swatches" id="swatches"></div>
+      <i class="marker" id="marker"></i>
+    </div>
+    <p class="note">
+      {%- if has_refs -%}
+      Grades come from the folders in reference/. Step 01 is the healthiest.
+      {%- else -%}
+      No reference photos found. Drop plant images into reference/&lt;label&gt;/ to teach it your own scale.
+      {%- endif -%}
+    </p>
+  </section>
+
+  <section class="chart">
+    <h2>Greenness scale</h2>
+    <div class="strip">
+      <div class="swatches" id="gscale"></div>
+      <i class="marker" id="gmarker"></i>
+    </div>
+    <p class="note" id="gnote">Capture a specimen to measure how green its foliage really is.</p>
+  </section>
+
+  <section class="chart">
+    <h2>Record — last 3 uploads</h2>
+    <div class="cards" id="cards"></div>
+  </section>
+</main>
+
+<script>
+const LABELS = {{ labels|tojson }};
+const RAMP = ['#2a6b36', '#4f8f3d', '#8fb43f', '#c9d14e'];   // healthiest -> sickest
+const AXES = ['colour', 'spotting', 'turgor', 'integrity'];
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const $ = id => document.getElementById(id);
+const cam = $('cam'), shot = $('shot'), win = $('window'), idle = $('idle');
+const overlay = $('overlay'), ov = overlay.getContext('2d'), startBtn = $('start');
+const grade = $('grade'), tags = $('tags'), slip = $('slip'), marker = $('marker'), cv = $('cv');
+const leafbox = $('leafbox');
+
+/* Chart strip: one numbered swatch per grade, coloured across the ramp. */
+const swatches = $('swatches');
+swatches.style.gridTemplateColumns = `repeat(${LABELS.length}, minmax(0,1fr))`;
+LABELS.forEach((label, i) => {
+  const c = RAMP[LABELS.length < 2 ? 0 : Math.round(i / (LABELS.length - 1) * (RAMP.length - 1))];
+  const el = document.createElement('div');
+  el.className = 'sw';
+  el.innerHTML = `<b class="chip" style="background:${c}"></b><b class="no">${String(i + 1).padStart(2, '0')}</b>`;
+  const name = document.createElement('span');
+  name.className = 'name';
+  name.textContent = label;
+  el.append(name);
+  swatches.append(el);
+});
+
+/* Greenness scale: 1-5 from the vision model's colour grade (0-100), in even 20-point
+   bands. It only moves when a specimen is captured and graded, not on the live feed. */
+const GREEN_RAMP = ['#7d5a24', '#9c7c1e', '#a8a832', '#5f9e2f', '#2f6b2a'];
+const GREEN_NAMES = ['mostly dead', 'heavily yellowed', 'half faded', 'mildly pale', 'lush green'];
+const gscale = $('gscale'), gmarker = $('gmarker');
+gscale.style.gridTemplateColumns = 'repeat(5, minmax(0,1fr))';
+GREEN_RAMP.forEach((c, i) => {
+  const el = document.createElement('div');
+  el.className = 'sw';
+  el.innerHTML = `<b class="chip" style="background:${c}"></b><b class="no">${String(i + 1).padStart(2, '0')}</b>`;
+  const name = document.createElement('span');
+  name.className = 'name';
+  name.textContent = GREEN_NAMES[i];
+  el.append(name);
+  gscale.append(el);
+});
+
+function greenLevel(greenPct) {
+  if (typeof greenPct !== 'number' || Number.isNaN(greenPct)) return null;
+  return Math.min(5, Math.max(1, Math.ceil(greenPct / 20)));
+}
+
+function pointGreenAt(level) {
+  if (!level) { gmarker.style.opacity = 0; return; }
+  gmarker.style.left = `calc(${(level - 0.5) / 5 * 100}% - 7px)`;
+  gmarker.style.opacity = 1;
+}
+
+let lastGreen = null;
+function setGreen(greenPct) {
+  const lvl = greenLevel(greenPct);
+  if (lvl === lastGreen) return;
+  lastGreen = lvl;
+  if (!lvl) {
+    pointGreenAt(null);
+    $('gnote').textContent = 'Capture a specimen to get the vision model\u2019s greenness grade.';
+    return;
+  }
+  pointGreenAt(lvl);
+  $('gnote').textContent =
+    `${lvl}/5 · greenness ${greenPct}/100 — the vision model\u2019s colour grade for this specimen.`;
+}
+
+/* ── record: the last 3 uploads ───────────────────────── */
+/* Kept in localStorage as small JPEG thumbnails (a full upload is megabytes; a
+   320px thumb is a few KB), so the record survives reloads without busting quota. */
+const REC_KEY = 'visoliaris-record';
+let record = [];
+try { record = JSON.parse(localStorage.getItem(REC_KEY) || '[]'); } catch { record = []; }
+if (!Array.isArray(record)) record = [];
+
+function makeThumb(uri) {
+  return new Promise(res => {
+    const im = new Image();
+    im.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = 320; c.height = 240;
+      const x = c.getContext('2d');
+      const s = Math.max(320 / im.width, 240 / im.height);   // same cover crop as the card
+      x.drawImage(im, (320 - im.width * s) / 2, (240 - im.height * s) / 2, im.width * s, im.height * s);
+      res(c.toDataURL('image/jpeg', 0.6));
+    };
+    im.onerror = () => res(null);
+    im.src = uri;
+  });
+}
+
+function renderRecord() {
+  const cards = $('cards');
+  cards.textContent = '';
+  if (!record.length) {
+    cards.append(Object.assign(document.createElement('p'), {
+      className: 'empty', textContent: 'No uploads yet — your last 3 readings will appear here.'
+    }));
+    return;
+  }
+  for (const e of record) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const img = new Image();
+    img.src = e.thumb; img.alt = e.condition;
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const cond = document.createElement('p');
+    cond.className = 'cond';
+    cond.textContent = e.condition;
+    const sub = document.createElement('span');
+    sub.className = 'sub';
+    sub.textContent = `health ${e.health}% · greenness ${e.green || '—'}/5 · conf ${e.conf}% · ` +
+      new Date(e.t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const bar = document.createElement('div');
+    bar.className = 'health';
+    const fill = document.createElement('i');
+    fill.style.width = e.health + '%';
+    bar.append(fill);
+    meta.append(cond, sub, bar);
+    card.append(img, meta);
+    cards.append(card);
+  }
+}
+
+async function addRecord(uri, d, healthPct, greenVal) {
+  const thumb = await makeThumb(uri);
+  record.unshift({ t: Date.now(), thumb, condition: d.condition || 'unknown',
+                   health: healthPct, conf: d.confidence || 0, green: greenLevel(greenVal) || 0 });
+  record = record.filter(e => e.thumb).slice(0, 3);
+  try { localStorage.setItem(REC_KEY, JSON.stringify(record)); } catch { /* quota: keep in memory */ }
+  renderRecord();
+}
+
+renderRecord();
+
+function pointAt(i) {
+  if (i < 0) { marker.style.opacity = 0; return; }
+  marker.style.left = `calc(${(i + 0.5) / LABELS.length * 100}% - 7px)`;
+  marker.style.opacity = 1;
+}
+
+/* Typewriter. Each run gets a token so a new reading cuts the old one off mid-sentence. */
+let run = 0;
+async function typeOut(parts) {
+  const me = ++run;
+  slip.textContent = '';
+  const caret = document.createElement('i');
+  caret.className = 'caret';
+  slip.append(caret);
+  for (const [cls, text] of parts) {
+    const span = document.createElement('span');
+    if (cls) span.className = cls;
+    slip.insertBefore(span, caret);
+    if (REDUCED) { span.textContent = text; continue; }
+    for (const ch of text) {
+      if (me !== run) return;
+      span.textContent += ch;
+      await new Promise(r => setTimeout(r, ch === '\n' ? 90 : 16));
+    }
+  }
+  if (me === run) caret.remove();
+}
+
+function setBars(values) {
+  for (const [k, v] of Object.entries(values)) {
+    const bar = document.querySelector(`[data-k="${k}"]`);
+    const num = document.querySelector(`[data-v="${k}"]`);
+    if (!bar) continue;
+    bar.style.transitionDelay = REDUCED ? '0ms' : `${(AXES.indexOf(k) + 1) * 90}ms`;
+    bar.style.width = v + '%';
+    num.textContent = v;
+  }
+}
+
+function clearReading(msg) {
+  run++;
+  grade.textContent = msg;
+  grade.classList.add('pending');
+  tags.textContent = '';
+  cv.textContent = '';
+  leafbox.hidden = true;
+  setBars(Object.fromEntries(['health', 'confidence', ...AXES].map(k => [k, 0])));
+  document.querySelectorAll('[data-v]').forEach(e => e.textContent = '—');
+  pointAt(-1);
+  setGreen(null);
+}
+
+/* ── capture ──────────────────────────────────────────── */
+/* Live pass: /detect runs the OpenCV mask + local classifier on a small frame, no API call.
+   The box comes back as fractions of the frame, so it survives any display size. */
+let live = false;
+
+function paint(d) {
+  const w = win.clientWidth, h = win.clientHeight;
+  if (overlay.width !== w || overlay.height !== h) { overlay.width = w; overlay.height = h; }
+  ov.clearRect(0, 0, w, h);
+  if (!d || !d.box || !cam.videoWidth) return;
+
+  // the video is object-fit: cover, so map frame coords through the same crop
+  const s = Math.max(w / cam.videoWidth, h / cam.videoHeight);
+  const ox = (w - cam.videoWidth * s) / 2, oy = (h - cam.videoHeight * s) / 2;
+  const x = ox + d.box[0] * cam.videoWidth * s, y = oy + d.box[1] * cam.videoHeight * s;
+  const bw = d.box[2] * cam.videoWidth * s, bh = d.box[3] * cam.videoHeight * s;
+
+  const ml = d.ml, known = ml && ml.known;
+  const tint = known ? '#c9d14e' : '#8a8f84';   // grey brackets when the model does not know it
+  const arm = Math.max(12, Math.min(bw, bh) * 0.18);
+  ov.strokeStyle = tint; ov.lineWidth = 2;
+  for (const [cx, sx] of [[x, 1], [x + bw, -1]]) {
+    for (const [cy, sy] of [[y, 1], [y + bh, -1]]) {
+      ov.beginPath();
+      ov.moveTo(cx + sx * arm, cy); ov.lineTo(cx, cy); ov.lineTo(cx, cy + sy * arm);
+      ov.stroke();
+    }
+  }
+
+  const c = d.cv || {};
+  const title = !ml ? 'no model — run bootstrap.py'
+    : known ? `${ml.label}  ${ml.confidence}%` : 'no match — not a plant it knows';
+  const sub = `green ${c.green}%  spots ${c.spots}  ${c.leaves || 0} leaf${(c.leaves || 0) === 1 ? '' : 's'}`;
+  ov.font = '600 13px ui-monospace, Menlo, monospace';
+  const tw = Math.max(ov.measureText(title).width, ov.measureText(sub).width) + 16;
+  const ty = Math.max(0, y - 38);
+  ov.fillStyle = 'rgba(12,18,13,.82)';
+  ov.fillRect(x, ty, tw, 36);
+  ov.fillStyle = tint;
+  ov.fillText(title, x + 8, ty + 16);
+  ov.font = '400 11px ui-monospace, Menlo, monospace';
+  ov.fillStyle = '#9fb08f';
+  ov.fillText(sub, x + 8, ty + 30);
+}
+
+async function liveLoop() {
+  const c = document.createElement('canvas');
+  while (live) {
+    if (cam.videoWidth && !document.hidden) {
+      c.width = 320;
+      c.height = Math.round(cam.videoHeight * 320 / cam.videoWidth);
+      c.getContext('2d').drawImage(cam, 0, 0, c.width, c.height);
+      let d = null;
+      try {
+        const res = await fetch('/detect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: c.toDataURL('image/jpeg', 0.6) })
+        });
+        d = await res.json();
+      } catch (err) { /* server restarting; try again next tick */ }
+      if (live) paint(d);   // greenness only moves on a captured grade (vision model), not live
+    }
+    await new Promise(r => setTimeout(r, 250));
+  }
+  ov.clearRect(0, 0, overlay.width, overlay.height);
+}
+
+/* ── capture ──────────────────────────────────────────── */
+startBtn.onclick = async () => {
+  if (!cam.srcObject) {
+    try {
+      cam.srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    } catch (err) {
+      idle.textContent = 'Camera unavailable — ' + err.message;
+      return;
+    }
+    $('snap').disabled = false;
+  }
+  cam.hidden = false; shot.hidden = true; idle.hidden = true;
+  startBtn.textContent = 'Camera on';
+  startBtn.disabled = true;
+  live = true;
+  liveLoop();
+};
+
+$('snap').onclick = () => {
+  const c = document.createElement('canvas');
+  c.width = cam.videoWidth; c.height = cam.videoHeight;
+  c.getContext('2d').drawImage(cam, 0, 0);
+  send(c.toDataURL('image/jpeg', 0.85));
+};
+
+$('file').onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => send(r.result);
+  r.readAsDataURL(f);
+};
+
+async function send(uri) {
+  live = false;
+  if (cam.srcObject) { startBtn.textContent = 'Back to live'; startBtn.disabled = false; }
+  shot.src = uri; shot.hidden = false; cam.hidden = true; idle.hidden = true;
+  win.classList.add('busy');
+  clearReading('Reading…');
+  slip.innerHTML = '<span class="lead">Comparing against the reference sheet…</span>';
+
+  let d;
+  try {
+    const res = await fetch('/analyze', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: uri })
+    });
+    d = await res.json();
+  } catch (err) {
+    d = { error: 'The server did not answer. Check that app.py is still running.' };
+  }
+  win.classList.remove('busy');
+
+  if (d.no_plant || (d.condition || '').toLowerCase() === 'no plant') {
+    clearReading('Please upload a plant');
+    slip.innerHTML = '<span class="lead">No plant was found in that photo. Try a clearer shot of the whole plant.</span>';
+    return;
+  }
+  if (d.error) {
+    clearReading('No reading');
+    slip.innerHTML = '';
+    slip.append(Object.assign(document.createElement('span'), { className: 'fault', textContent: d.error }));
+    return;
+  }
+
+  grade.textContent = d.condition || 'unknown';
+  grade.classList.remove('pending');
+  // leaf count: the vision model's call, falling back to the OpenCV ridge count
+  const c = d.cv || {};
+  $('leaves').textContent = (d.leaves || c.leaves || 0);
+  leafbox.hidden = false;
+  // the scale is the vision model's colour grade alone; cv.greenness is not used here
+  const greenVal = typeof d.greenness === 'number' ? d.greenness : null;
+  setGreen(greenVal);
+  // headline meter: the four axes averaged, so one number says how the plant is doing
+  const axes = AXES.map(k => (d.scores || {})[k] || 0);
+  const health = Math.round(axes.reduce((a, b) => a + b, 0) / AXES.length);
+  setBars({ health, confidence: d.confidence || 0, ...(d.scores || {}) });
+  pointAt(LABELS.indexOf(d.condition));
+  addRecord(uri, d, health, greenVal);
+
+  tags.textContent = '';
+  (d.symptoms || []).forEach(s => {
+    tags.append(Object.assign(document.createElement('span'), { className: 'tag', textContent: s }));
+  });
+
+  const stem = (c.stem_length || 0) > 0
+    ? ` · stem ${(c.stem_length * 100).toFixed(0)}% of frame tall × ${(c.stem_width * 100).toFixed(0)}% wide`
+    : ' · stem hidden by foliage';
+  cv.textContent = c.foliage === undefined ? '' :
+    `OpenCV · foliage ${c.foliage}% of frame · green ${c.green}% · yellow ${c.yellow}% · brown ${c.brown}% · ${c.spots} dark spots`
+    + ` · ${c.leaves} leaves` + stem
+    + (d.ml ? (d.ml.known ? ` · k-NN says ${d.ml.label} (${d.ml.confidence}%)`
+                          : ' · k-NN: no match in its training set') : '');
+
+  typeOut([['', d.plant || ''], ['lead', d.advice ? '\n\n→ ' + d.advice : '']]);
+}
+</script>
